@@ -1,0 +1,42 @@
+[project]
+name = "moneyu"
+version = "0.1.0"
+description = "Discord bot for shared trip expenses and settlements."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.13.0",
+    "asyncpg>=0.29.0",
+    "discord.py>=2.4.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.8.0",
+    "ty>=0.0.1a8",
+]
+
+[project.scripts]
+moneyu = "moneyu.bot:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[tool.ty.src]
+include = ["moneyu", "tests"]
