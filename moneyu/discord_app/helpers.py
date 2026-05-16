@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 
 import discord
@@ -11,6 +12,8 @@ from moneyu.discord_app.context import AppContext
 from moneyu.services.expenses import list_expenses
 from moneyu.services.payments import list_payments
 from moneyu.services.trips import get_trip_by_name, list_trips
+
+logger = logging.getLogger(__name__)
 
 
 class UserFacingError(ValueError):
@@ -35,11 +38,41 @@ async def run_command[T](
     handler: Callable[[AsyncSession], Awaitable[T]],
 ) -> T | None:
     context = get_context(interaction)
+    command_name = interaction.command.qualified_name if interaction.command else "<unknown>"
     try:
+        logger.info(
+            "Command started command=%s guild_id=%s user_id=%s",
+            command_name,
+            interaction.guild_id,
+            interaction.user.id,
+        )
         async with context.session_factory() as session, session.begin():
-            return await handler(session)
+            result = await handler(session)
+        logger.info(
+            "Command completed command=%s guild_id=%s user_id=%s",
+            command_name,
+            interaction.guild_id,
+            interaction.user.id,
+        )
+        return result
     except ValueError as exc:
+        logger.info(
+            "Command rejected command=%s guild_id=%s user_id=%s error=%s",
+            command_name,
+            interaction.guild_id,
+            interaction.user.id,
+            exc,
+        )
         await respond_error(interaction, str(exc))
+        return None
+    except Exception:
+        logger.exception(
+            "Command failed command=%s guild_id=%s user_id=%s",
+            command_name,
+            interaction.guild_id,
+            interaction.user.id,
+        )
+        await respond_error(interaction, "Something went wrong while running that command.")
         return None
 
 
@@ -67,61 +100,73 @@ async def group_autocomplete(
     interaction: discord.Interaction,
     current: str,
 ) -> list[app_commands.Choice[str]]:
-    if interaction.guild_id is None:
+    try:
+        if interaction.guild_id is None:
+            return []
+        context = get_context(interaction)
+        async with context.session_factory() as session:
+            groups = await list_trips(session, guild_id=interaction.guild_id)
+        current_folded = current.casefold()
+        return [
+            app_commands.Choice(name=group.name, value=group.name)
+            for group in groups
+            if current_folded in group.name.casefold()
+        ][:25]
+    except Exception:
+        logger.exception("Group autocomplete failed guild_id=%s", interaction.guild_id)
         return []
-    context = get_context(interaction)
-    async with context.session_factory() as session:
-        groups = await list_trips(session, guild_id=interaction.guild_id)
-    current_folded = current.casefold()
-    return [
-        app_commands.Choice(name=group.name, value=group.name)
-        for group in groups
-        if current_folded in group.name.casefold()
-    ][:25]
 
 
 async def expense_autocomplete(
     interaction: discord.Interaction,
     current: str,
 ) -> list[app_commands.Choice[str]]:
-    group_name = getattr(interaction.namespace, "group", None)
-    if interaction.guild_id is None or not isinstance(group_name, str) or not group_name:
-        return []
-    context = get_context(interaction)
-    async with context.session_factory() as session:
-        group = await get_trip_by_name(session, guild_id=interaction.guild_id, name=group_name)
-        if group is None:
+    try:
+        group_name = getattr(interaction.namespace, "group", None)
+        if interaction.guild_id is None or not isinstance(group_name, str) or not group_name:
             return []
-        expenses = await list_expenses(session, group_id=group.id, limit=25)
-    current_folded = current.casefold()
-    choices: list[app_commands.Choice[str]] = []
-    for expense in expenses:
-        label = f"{expense.id}: {expense.name}"
-        if current_folded in label.casefold():
-            choices.append(app_commands.Choice(name=label[:100], value=str(expense.id)))
-    return choices[:25]
+        context = get_context(interaction)
+        async with context.session_factory() as session:
+            group = await get_trip_by_name(session, guild_id=interaction.guild_id, name=group_name)
+            if group is None:
+                return []
+            expenses = await list_expenses(session, group_id=group.id, limit=25)
+        current_folded = current.casefold()
+        choices: list[app_commands.Choice[str]] = []
+        for expense in expenses:
+            label = f"{expense.id}: {expense.name}"
+            if current_folded in label.casefold():
+                choices.append(app_commands.Choice(name=label[:100], value=str(expense.id)))
+        return choices[:25]
+    except Exception:
+        logger.exception("Expense autocomplete failed guild_id=%s", interaction.guild_id)
+        return []
 
 
 async def payment_autocomplete(
     interaction: discord.Interaction,
     current: str,
 ) -> list[app_commands.Choice[str]]:
-    group_name = getattr(interaction.namespace, "group", None)
-    if interaction.guild_id is None or not isinstance(group_name, str) or not group_name:
-        return []
-    context = get_context(interaction)
-    async with context.session_factory() as session:
-        group = await get_trip_by_name(session, guild_id=interaction.guild_id, name=group_name)
-        if group is None:
+    try:
+        group_name = getattr(interaction.namespace, "group", None)
+        if interaction.guild_id is None or not isinstance(group_name, str) or not group_name:
             return []
-        payments = await list_payments(session, group_id=group.id, limit=25)
-    current_folded = current.casefold()
-    choices: list[app_commands.Choice[str]] = []
-    for payment in payments:
-        label = f"{payment.id}: {payment.from_user_id} -> {payment.to_user_id}"
-        if current_folded in label.casefold():
-            choices.append(app_commands.Choice(name=label[:100], value=str(payment.id)))
-    return choices[:25]
+        context = get_context(interaction)
+        async with context.session_factory() as session:
+            group = await get_trip_by_name(session, guild_id=interaction.guild_id, name=group_name)
+            if group is None:
+                return []
+            payments = await list_payments(session, group_id=group.id, limit=25)
+        current_folded = current.casefold()
+        choices: list[app_commands.Choice[str]] = []
+        for payment in payments:
+            label = f"{payment.id}: {payment.from_user_id} -> {payment.to_user_id}"
+            if current_folded in label.casefold():
+                choices.append(app_commands.Choice(name=label[:100], value=str(payment.id)))
+        return choices[:25]
+    except Exception:
+        logger.exception("Payment autocomplete failed guild_id=%s", interaction.guild_id)
+        return []
 
 
 def parse_int_option(raw: str, label: str) -> int:

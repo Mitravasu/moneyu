@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import discord
@@ -9,6 +10,8 @@ from moneyu.discord_app.context import AppContext
 from moneyu.discord_app.formatting import trip_label, user_mention
 from moneyu.services.expenses import ExpenseCreate, SplitMode, create_expense, edit_expense
 from moneyu.services.money import format_cents, parse_amount_to_cents
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,8 +77,20 @@ class ExpenseParticipantView(discord.ui.View):
     ) -> None:
         _ = button
         if self.state.split_mode is SplitMode.EVEN:
+            logger.info(
+                "Opening even expense modal group_id=%s user_id=%s expense_id=%s",
+                self.state.group_id,
+                interaction.user.id,
+                self.state.expense_id,
+            )
             await interaction.response.send_modal(EvenExpenseModal(self.state))
             return
+        logger.info(
+            "Opening custom expense modal group_id=%s user_id=%s expense_id=%s",
+            self.state.group_id,
+            interaction.user.id,
+            self.state.expense_id,
+        )
         await interaction.response.send_modal(CustomExpenseModal(self.state))
 
     @discord.ui.button(label="Change", style=discord.ButtonStyle.secondary)
@@ -144,6 +159,12 @@ class ParticipantSelect(discord.ui.Select[ParticipantSelectView]):
     async def callback(self, interaction: discord.Interaction) -> None:
         selected_ids = tuple(int(value) for value in self.values)
         state = _state_with_selection(self.state, selected_ids)
+        logger.info(
+            "Expense participants changed group_id=%s user_id=%s count=%d",
+            state.group_id,
+            interaction.user.id,
+            len(selected_ids),
+        )
         await interaction.response.edit_message(
             content=_participant_message(state),
             view=ExpenseParticipantView(state),
@@ -235,6 +256,13 @@ async def _submit_expense(
     data: ExpenseCreate,
 ) -> None:
     try:
+        logger.info(
+            "Submitting expense group_id=%s user_id=%s expense_id=%s split_mode=%s",
+            state.group_id,
+            state.requester_user_id,
+            state.expense_id,
+            data.split_mode.value,
+        )
         async with state.context.session_factory() as session, session.begin():
             group = await session.get(TripGroup, state.group_id)
             if group is None:
@@ -259,8 +287,33 @@ async def _submit_expense(
         await interaction.response.send_message(
             f"{verb} expense `{expense.id}` in {trip_label(group)}.",
         )
+        logger.info(
+            "Expense submitted group_id=%s user_id=%s expense_id=%s action=%s",
+            state.group_id,
+            state.requester_user_id,
+            expense.id,
+            verb.lower(),
+        )
     except ValueError as exc:
+        logger.info(
+            "Expense submission rejected group_id=%s user_id=%s expense_id=%s error=%s",
+            state.group_id,
+            state.requester_user_id,
+            state.expense_id,
+            exc,
+        )
         await interaction.response.send_message(str(exc), ephemeral=True)
+    except Exception:
+        logger.exception(
+            "Expense submission failed group_id=%s user_id=%s expense_id=%s",
+            state.group_id,
+            state.requester_user_id,
+            state.expense_id,
+        )
+        await interaction.response.send_message(
+            "Something went wrong while saving that expense.",
+            ephemeral=True,
+        )
 
 
 def _state_with_selection(

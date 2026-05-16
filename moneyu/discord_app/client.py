@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import discord
 from discord import app_commands
 
@@ -9,6 +11,8 @@ from moneyu.discord_app.commands.status import status_command
 from moneyu.discord_app.commands.sync import sync_command
 from moneyu.discord_app.commands.trips import trip_group
 from moneyu.discord_app.context import AppContext
+
+logger = logging.getLogger(__name__)
 
 
 class MoneyUClient(discord.Client):
@@ -26,4 +30,16 @@ class MoneyUClient(discord.Client):
         if self.app_context.config.dev_guild_id is not None:
             guild = discord.Object(id=self.app_context.config.dev_guild_id)
             self.tree.copy_global_to(guild=guild)
-            await self.tree.sync(guild=guild)
+            synced = await self.tree.sync(guild=guild)
+            logger.info(
+                "Synced %d command(s) to dev guild %s",
+                len(synced),
+                self.app_context.config.dev_guild_id,
+            )
+
+    async def on_ready(self) -> None:
+        logger.info(
+            "Discord client ready user=%s guilds=%d",
+            self.user,
+            len(self.guilds),
+        )
