@@ -5,7 +5,11 @@ import pytest
 from moneyu.services.balances import ExpenseLedgerEntry, PaymentLedgerEntry, compute_balances
 from moneyu.services.memberships import MemberLedgerState, MembershipError, can_remove_member
 from moneyu.services.money import MoneyError, format_cents, parse_amount_to_cents
-from moneyu.services.payments import PaymentValidationError, validate_payment_against_settlements
+from moneyu.services.payments import (
+    PaymentValidationError,
+    validate_payment_against_settlements,
+    validate_payment_note,
+)
 from moneyu.services.rounding import SplitError, calculate_even_split, validate_custom_split
 from moneyu.services.settlement import SettlementEdge, optimize_settlements
 
@@ -87,6 +91,16 @@ def test_payment_validation_accepts_valid_partial_payment() -> None:
         amount_cents=200,
         settlements=[SettlementEdge(from_user_id=3, to_user_id=1, amount_cents=300)],
     )
+
+
+def test_validate_payment_note_cleans_empty_and_text_values() -> None:
+    assert validate_payment_note("  ") is None
+    assert validate_payment_note(" thanks ") == "thanks"
+
+
+def test_validate_payment_note_rejects_long_note() -> None:
+    with pytest.raises(PaymentValidationError):
+        validate_payment_note("x" * 501)
 
 
 @pytest.mark.parametrize(
