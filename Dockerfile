@@ -13,4 +13,4 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 COPY moneyu ./moneyu
 
-CMD ["uv", "run", "moneyu"]
+CMD ["uv", "run", "--no-dev", "python", "-m", "moneyu.bot"]

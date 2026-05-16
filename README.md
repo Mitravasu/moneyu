@@ -33,12 +33,14 @@ uv run alembic upgrade head
 Start the bot:
 
 ```sh
-uv run moneyu
+uv run python -m moneyu.bot
 ```
 
 The bot validates config and verifies that the database is at the Alembic head revision on startup. It does not run migrations automatically. Logs are written to stdout/stderr and include startup, migration checks, command execution, autocomplete failures, and expense modal submissions.
 
 ## Docker
+
+`docker-compose.yml` overrides `DATABASE_URL` for the `bot` service to use `postgres` as the database host. Keep `localhost` in `.env` for local commands like `uv run alembic upgrade head`; inside Compose, `localhost` would point at the bot container instead of the Postgres container.
 
 Start Postgres:
 
@@ -49,7 +51,7 @@ docker compose up -d postgres
 Run migrations from the app image:
 
 ```sh
-docker compose run --rm bot uv run alembic upgrade head
+docker compose run --rm bot uv run --no-dev alembic upgrade head
 ```
 
 Start the bot:

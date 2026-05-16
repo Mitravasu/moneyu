@@ -18,6 +18,8 @@ services:
   bot:
     build: .
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://moneyu:moneyu@postgres:5432/moneyu
     depends_on:
       postgres:
         condition: service_healthy
