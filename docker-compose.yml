@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: moneyu
-      POSTGRES_USER: moneyu
-      POSTGRES_PASSWORD: moneyu
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U moneyu -d moneyu"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,7 +19,7 @@ services:
     build: .
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://moneyu:moneyu@postgres:5432/moneyu
+      DATABASE_URL: ${COMPOSE_DATABASE_URL}
     depends_on:
       postgres:
         condition: service_healthy
