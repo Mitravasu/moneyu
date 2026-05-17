@@ -141,6 +141,5 @@ uv run ty check
 
 Current known gaps:
 
-- List/status pagination is not implemented yet.
 - DB-backed integration tests are still needed.
 - Live Discord smoke testing requires a real bot token and test server.

@@ -3,8 +3,9 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 
-from moneyu.discord_app.formatting import status_embed
+from moneyu.discord_app.formatting import status_embeds
 from moneyu.discord_app.helpers import group_autocomplete, require_group, run_command
+from moneyu.discord_app.pagination import send_paginated_embed
 from moneyu.services.ledger import group_balances, group_settlements
 from moneyu.services.memberships import require_active_member
 
@@ -21,15 +22,13 @@ async def status_command(
         await require_active_member(session, group_id=trip.id, user_id=interaction.user.id)
         balances = await group_balances(session, trip.id)
         settlements = await group_settlements(session, trip.id)
-        await interaction.response.send_message(
-            embed=status_embed(
-                group=trip,
-                balances=balances,
-                settlements=settlements,
-                requester_user_id=interaction.user.id,
-                private=not public,
-            ),
-            ephemeral=not public,
+        pages = status_embeds(
+            group=trip,
+            balances=balances,
+            settlements=settlements,
+            requester_user_id=interaction.user.id,
+            private=not public,
         )
+        await send_paginated_embed(interaction, pages=pages, ephemeral=not public)
 
     await run_command(interaction, handler)

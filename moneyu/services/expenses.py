@@ -176,14 +176,22 @@ async def edit_expense(
     return expense
 
 
-async def list_expenses(session: AsyncSession, *, group_id: int, limit: int = 10) -> list[Expense]:
-    result = await session.scalars(
+async def list_expenses(
+    session: AsyncSession,
+    *,
+    group_id: int,
+    limit: int | None = 10,
+    offset: int = 0,
+) -> list[Expense]:
+    statement = (
         select(Expense)
         .options(selectinload(Expense.shares))
         .where(Expense.group_id == group_id, Expense.deleted_at.is_(None))
         .order_by(Expense.created_at.desc(), Expense.id.desc())
-        .limit(limit)
     )
+    if limit is not None:
+        statement = statement.limit(limit).offset(offset)
+    result = await session.scalars(statement)
     return list(result)
 
 

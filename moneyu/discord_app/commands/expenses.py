@@ -3,7 +3,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 
-from moneyu.discord_app.formatting import expense_detail_embed, expense_list_embed, trip_label
+from moneyu.discord_app.formatting import expense_detail_embed, expense_list_embeds, trip_label
 from moneyu.discord_app.helpers import (
     expense_autocomplete,
     get_context,
@@ -12,6 +12,7 @@ from moneyu.discord_app.helpers import (
     require_group,
     run_command,
 )
+from moneyu.discord_app.pagination import send_paginated_embed
 from moneyu.discord_app.views import (
     ExpenseFlowState,
     ExpenseParticipantView,
@@ -127,11 +128,9 @@ async def list_command(
     async def handler(session):
         trip = await require_group(session, interaction=interaction, group_name=group)
         await require_active_member(session, group_id=trip.id, user_id=interaction.user.id)
-        expenses = await list_expenses(session, group_id=trip.id)
-        await interaction.response.send_message(
-            embed=expense_list_embed(trip, expenses),
-            ephemeral=not public,
-        )
+        expenses = await list_expenses(session, group_id=trip.id, limit=None)
+        pages = expense_list_embeds(trip, expenses)
+        await send_paginated_embed(interaction, pages=pages, ephemeral=not public)
 
     await run_command(interaction, handler)
 

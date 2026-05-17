@@ -93,13 +93,21 @@ async def record_payment(
     return payment
 
 
-async def list_payments(session: AsyncSession, *, group_id: int, limit: int = 10) -> list[Payment]:
-    result = await session.scalars(
+async def list_payments(
+    session: AsyncSession,
+    *,
+    group_id: int,
+    limit: int | None = 10,
+    offset: int = 0,
+) -> list[Payment]:
+    statement = (
         select(Payment)
         .where(Payment.group_id == group_id, Payment.deleted_at.is_(None))
         .order_by(Payment.created_at.desc(), Payment.id.desc())
-        .limit(limit)
     )
+    if limit is not None:
+        statement = statement.limit(limit).offset(offset)
+    result = await session.scalars(statement)
     return list(result)
 
 
