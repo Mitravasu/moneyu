@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from moneyu.db.models import Guild, TripGroup, TripMember
 from moneyu.services.audit import snapshot_model, write_audit
+from moneyu.services.currencies import VALID_CURRENCY_CODES
 
 
 class TripValidationError(ValueError):
@@ -39,6 +40,8 @@ def normalize_currency(currency: str) -> str:
     normalized = currency.strip().upper()
     if len(normalized) != 3 or not normalized.isalpha():
         raise TripValidationError("Currency must be a 3-letter ISO 4217 code")
+    if normalized not in VALID_CURRENCY_CODES:
+        raise TripValidationError("Currency must be an active ISO 4217 code")
     return normalized
 
 
@@ -79,6 +82,42 @@ async def create_trip(
         action="create",
         entity_type="trip_group",
         entity_id=group.id,
+        after=snapshot_model(group),
+    )
+    return group
+
+
+async def rename_trip(
+    session: AsyncSession,
+    *,
+    group: TripGroup,
+    new_name: str,
+    actor_user_id: int,
+) -> TripGroup:
+    cleaned_name = clean_group_name(new_name)
+    normalized_name = normalize_group_name(cleaned_name)
+    if normalized_name == group.normalized_name:
+        group.name = cleaned_name
+        await session.flush()
+        return group
+
+    before = snapshot_model(group)
+    group.name = cleaned_name
+    group.normalized_name = normalized_name
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise TripValidationError("A trip group with that name already exists") from exc
+
+    await write_audit(
+        session,
+        guild_id=group.guild_id,
+        group_id=group.id,
+        actor_user_id=actor_user_id,
+        action="rename",
+        entity_type="trip_group",
+        entity_id=group.id,
+        before=before,
         after=snapshot_model(group),
     )
     return group
