@@ -10,6 +10,7 @@ from moneyu.discord_app.helpers import (
     payment_autocomplete,
     require_group,
     run_command,
+    send_celebration_message,
 )
 from moneyu.discord_app.pagination import send_paginated_embed
 from moneyu.services.memberships import require_active_member
@@ -41,10 +42,19 @@ async def record(
             amount_cents=parse_amount_to_cents(amount),
             note=note,
         )
-        await interaction.response.send_message(
+        message = (
             f"Recorded {user_mention(payment.from_user_id)} paying "
             f"{user_mention(payment.to_user_id)} "
             f"{format_cents(payment.amount_cents, trip.currency)} for {trip_label(trip)}."
+        )
+        await send_celebration_message(
+            interaction,
+            event="payment_recorded",
+            text=message,
+            send_message=interaction.response.send_message,
+            failure_notice=(
+                "The payment was recorded, but I couldn't post the success message in the channel."
+            ),
         )
 
     await run_command(interaction, handler)

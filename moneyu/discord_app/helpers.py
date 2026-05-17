@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from moneyu.db.models import TripGroup
 from moneyu.discord_app.context import AppContext
+from moneyu.discord_app.gifs import CelebrationEvent, celebration_message
 from moneyu.services.expenses import list_expenses
 from moneyu.services.payments import list_payments
 from moneyu.services.trips import get_trip_by_name, list_trips
@@ -31,6 +32,39 @@ async def respond_error(interaction: discord.Interaction, message: str) -> None:
         await interaction.followup.send(message, ephemeral=True)
     else:
         await interaction.response.send_message(message, ephemeral=True)
+
+
+async def send_celebration_message(
+    interaction: discord.Interaction,
+    *,
+    event: CelebrationEvent,
+    text: str,
+    send_message: Callable[[str], Awaitable[None]],
+    failure_notice: str,
+) -> None:
+    try:
+        await send_message(celebration_message(event, text))
+        return
+    except Exception:
+        logger.exception(
+            "Celebration message with GIF failed event=%s guild_id=%s user_id=%s",
+            event,
+            interaction.guild_id,
+            interaction.user.id,
+        )
+
+    try:
+        await send_message(text)
+        return
+    except Exception:
+        logger.exception(
+            "Celebration message fallback failed event=%s guild_id=%s user_id=%s",
+            event,
+            interaction.guild_id,
+            interaction.user.id,
+        )
+
+    await respond_error(interaction, failure_notice)
 
 
 async def run_command[T](

@@ -4,10 +4,12 @@ import logging
 from dataclasses import dataclass
 
 import discord
+from discord import HTTPException
 
 from moneyu.db.models import TripGroup, TripMember
 from moneyu.discord_app.context import AppContext
 from moneyu.discord_app.formatting import trip_label, user_mention
+from moneyu.discord_app.helpers import send_celebration_message
 from moneyu.services.expenses import ExpenseCreate, SplitMode, create_expense, edit_expense
 from moneyu.services.money import format_cents, parse_amount_to_cents
 
@@ -306,10 +308,21 @@ async def _submit_expense(
                     data=data,
                 )
                 verb = "Updated"
-        await interaction.response.edit_message(
-            content=f"{verb} expense `{expense.id}` in {trip_label(group)}.",
-            view=None,
-        )
+        message = f"{verb} expense `{expense.id}` in {trip_label(group)}."
+        if state.expense_id is None:
+            await interaction.response.edit_message(content=message, view=None)
+            await send_celebration_message(
+                interaction,
+                event="expense_added",
+                text=message,
+                send_message=_channel_sender(interaction),
+                failure_notice=(
+                    "The expense was saved, but I couldn't post the success message in the channel."
+                ),
+            )
+            await _delete_expense_flow_message(interaction)
+        else:
+            await interaction.response.edit_message(content=message, view=None)
         logger.info(
             "Expense submitted group_id=%s user_id=%s expense_id=%s action=%s",
             state.group_id,
@@ -336,6 +349,27 @@ async def _submit_expense(
         await interaction.response.send_message(
             "Something went wrong while saving that expense.",
             ephemeral=True,
+        )
+
+
+def _channel_sender(interaction: discord.Interaction):
+    async def send(*args, **kwargs) -> None:
+        channel = interaction.channel
+        if channel is None:
+            raise RuntimeError("Interaction channel is unavailable.")
+        await channel.send(*args, **kwargs)
+
+    return send
+
+
+async def _delete_expense_flow_message(interaction: discord.Interaction) -> None:
+    try:
+        await interaction.delete_original_response()
+    except (HTTPException, RuntimeError):
+        logger.info(
+            "Could not delete original expense flow response guild_id=%s user_id=%s",
+            interaction.guild_id,
+            interaction.user.id,
         )
 
 
