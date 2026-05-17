@@ -54,7 +54,11 @@ async def add(
             currency=trip.currency,
             payer_user_id=payer_id,
             split_mode=SplitMode(split_mode.value),
-            members=build_participant_options(guild=interaction.guild, members=members),
+            members=await build_participant_options(
+                client=interaction.client,
+                guild=interaction.guild,
+                members=members,
+            ),
             selected_user_ids=tuple(member.user_id for member in members),
         )
         await interaction.response.send_message(
@@ -92,7 +96,11 @@ async def edit(interaction: discord.Interaction, group: str, expense: str) -> No
             currency=trip.currency,
             payer_user_id=found.payer_user_id,
             split_mode=SplitMode(found.split_mode),
-            members=build_participant_options(guild=interaction.guild, members=members),
+            members=await build_participant_options(
+                client=interaction.client,
+                guild=interaction.guild,
+                members=members,
+            ),
             selected_user_ids=selected,
             expense_id=found.id,
             default_name=found.name,

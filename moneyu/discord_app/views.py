@@ -42,17 +42,39 @@ class ExpenseFlowState:
         return self.expense_id is not None
 
 
-def build_participant_options(
+async def build_participant_options(
     *,
+    client: discord.Client,
     guild: discord.Guild | None,
     members: list[TripMember],
 ) -> tuple[ParticipantOption, ...]:
     options: list[ParticipantOption] = []
     for member in members:
-        discord_member = guild.get_member(member.user_id) if guild is not None else None
-        label = discord_member.display_name if discord_member is not None else str(member.user_id)
+        label = await _participant_label(client=client, guild=guild, user_id=member.user_id)
         options.append(ParticipantOption(user_id=member.user_id, label=label[:100]))
     return tuple(options)
+
+
+async def _participant_label(
+    *,
+    client: discord.Client,
+    guild: discord.Guild | None,
+    user_id: int,
+) -> str:
+    guild_member = guild.get_member(user_id) if guild is not None else None
+    if guild_member is not None:
+        return guild_member.display_name
+
+    cached_user = client.get_user(user_id)
+    if cached_user is not None:
+        return cached_user.display_name
+
+    try:
+        fetched_user = await client.fetch_user(user_id)
+    except discord.HTTPException:
+        logger.info("Could not fetch participant user label user_id=%s", user_id)
+        return str(user_id)
+    return fetched_user.display_name
 
 
 class ExpenseParticipantView(discord.ui.View):
