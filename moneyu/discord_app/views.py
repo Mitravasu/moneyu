@@ -306,8 +306,9 @@ async def _submit_expense(
                     data=data,
                 )
                 verb = "Updated"
-        await interaction.response.send_message(
-            f"{verb} expense `{expense.id}` in {trip_label(group)}.",
+        await interaction.response.edit_message(
+            content=f"{verb} expense `{expense.id}` in {trip_label(group)}.",
+            view=None,
         )
         logger.info(
             "Expense submitted group_id=%s user_id=%s expense_id=%s action=%s",
