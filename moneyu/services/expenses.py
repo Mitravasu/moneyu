@@ -5,11 +5,11 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Self
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from moneyu.db.models import Expense, ExpenseShare, RoundingLedger, TripGroup
+from moneyu.db.models import Expense, ExpenseShare, TripGroup
 from moneyu.services.audit import snapshot_model, write_audit
 from moneyu.services.ledger import active_member_ids
 from moneyu.services.locks import lock_trip
@@ -116,8 +116,6 @@ async def create_expense(
     ]
     session.add(expense)
     await session.flush()
-    if data.split_mode is SplitMode.EVEN:
-        await _record_rounding_absorptions(session, group_id=group.id, shares=shares)
     await write_audit(
         session,
         guild_id=group.guild_id,
@@ -148,7 +146,12 @@ async def edit_expense(
 
     before = _expense_snapshot(expense)
     name, description = validate_expense_text(name=data.name, description=data.description)
-    shares = await _resolve_shares(session, group_id=group.id, data=data)
+    shares = await _resolve_shares(
+        session,
+        group_id=group.id,
+        data=data,
+        exclude_expense_id=expense.id,
+    )
 
     expense.name = name
     expense.description = description
@@ -160,8 +163,6 @@ async def edit_expense(
         for user_id, share_cents in shares.items()
     ]
     await session.flush()
-    if data.split_mode is SplitMode.EVEN:
-        await _record_rounding_absorptions(session, group_id=group.id, shares=shares)
     await write_audit(
         session,
         guild_id=group.guild_id,
@@ -243,6 +244,7 @@ async def _resolve_shares(
     *,
     group_id: int,
     data: ExpenseCreate,
+    exclude_expense_id: int | None = None,
 ) -> dict[int, int]:
     member_ids = await active_member_ids(session, group_id)
     member_set = set(member_ids)
@@ -251,7 +253,11 @@ async def _resolve_shares(
             raise ExpenseError("Even split requires a total amount")
         participants = data.participant_user_ids or tuple(member_ids)
         _require_active_participants(participants, member_set)
-        absorptions = await _rounding_absorptions(session, group_id=group_id)
+        absorptions = await _derived_absorptions(
+            session,
+            group_id=group_id,
+            exclude_expense_id=exclude_expense_id,
+        )
         return calculate_even_split(
             total_cents=data.total_cents,
             payer_user_id=data.payer_user_id,
@@ -273,47 +279,42 @@ def _require_active_participants(participants: tuple[int, ...], active_members: 
         raise ExpenseError(f"Participants are not active trip members: {inactive}")
 
 
-async def _rounding_absorptions(session: AsyncSession, *, group_id: int) -> dict[int, int]:
-    rows = await session.execute(
-        select(RoundingLedger.user_id, RoundingLedger.absorbed_cents).where(
-            RoundingLedger.group_id == group_id
-        )
-    )
-    return {user_id: absorbed_cents for user_id, absorbed_cents in rows.tuples()}
-
-
-async def _record_rounding_absorptions(
+async def _derived_absorptions(
     session: AsyncSession,
     *,
     group_id: int,
-    shares: dict[int, int],
-) -> None:
-    if not shares:
-        return
-    base_share = min(shares.values())
-    absorptions = {
-        user_id: share_cents - base_share
-        for user_id, share_cents in shares.items()
-        if share_cents > base_share
-    }
-    for user_id, absorbed_cents in absorptions.items():
-        ledger = await session.scalar(
-            select(RoundingLedger).where(
-                RoundingLedger.group_id == group_id,
-                RoundingLedger.user_id == user_id,
-            )
+    exclude_expense_id: int | None = None,
+) -> dict[int, int]:
+    expenses = await session.scalars(_even_split_expenses_query(group_id, exclude_expense_id))
+    absorptions: dict[int, int] = {}
+    for expense in expenses:
+        if not expense.shares:
+            continue
+        base_share = min(share.share_cents for share in expense.shares)
+        for share in expense.shares:
+            absorbed_cents = share.share_cents - base_share
+            if absorbed_cents <= 0:
+                continue
+            absorptions[share.user_id] = absorptions.get(share.user_id, 0) + absorbed_cents
+    return absorptions
+
+
+def _even_split_expenses_query(
+    group_id: int,
+    exclude_expense_id: int | None = None,
+) -> Select[tuple[Expense]]:
+    statement = (
+        select(Expense)
+        .options(selectinload(Expense.shares))
+        .where(
+            Expense.group_id == group_id,
+            Expense.deleted_at.is_(None),
+            Expense.split_mode == SplitMode.EVEN.value,
         )
-        if ledger is None:
-            session.add(
-                RoundingLedger(
-                    group_id=group_id,
-                    user_id=user_id,
-                    absorbed_cents=absorbed_cents,
-                )
-            )
-        else:
-            ledger.absorbed_cents += absorbed_cents
-    await session.flush()
+    )
+    if exclude_expense_id is not None:
+        statement = statement.where(Expense.id != exclude_expense_id)
+    return statement.order_by(Expense.id)
 
 
 def _expense_snapshot(expense: Expense) -> dict[str, object]:

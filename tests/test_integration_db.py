@@ -3,8 +3,8 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from moneyu.db.models import AuditLog, Payment, TripMember
-from moneyu.services.expenses import ExpenseCreate, create_expense
+from moneyu.db.models import AuditLog, Expense, Payment, TripMember
+from moneyu.services.expenses import ExpenseCreate, create_expense, delete_expense, edit_expense
 from moneyu.services.memberships import MembershipError, add_member, remove_member
 from moneyu.services.payments import PaymentValidationError, record_payment
 from moneyu.services.trips import create_trip
@@ -20,6 +20,16 @@ async def _seed_trip_with_two_members(session: AsyncSession):
     )
     await add_member(session, group=trip, actor_user_id=101, user_id=202)
     return trip
+
+
+async def _seed_trip_with_three_members(session: AsyncSession):
+    trip = await _seed_trip_with_two_members(session)
+    await add_member(session, group=trip, actor_user_id=101, user_id=303)
+    return trip
+
+
+def _shares_by_user(expense: Expense) -> dict[int, int]:
+    return {share.user_id: share.share_cents for share in expense.shares}
 
 
 async def test_create_trip_persists_membership_and_audit(db_session: AsyncSession) -> None:
@@ -149,3 +159,131 @@ async def test_remove_member_blocked_for_active_ledger(db_session: AsyncSession)
         pass
     else:
         raise AssertionError("Expected MembershipError for member with active ledger involvement")
+
+
+async def test_even_split_create_uses_rotation_even_when_payer_is_included(
+    db_session: AsyncSession,
+) -> None:
+    trip = await _seed_trip_with_three_members(db_session)
+
+    first = await create_expense(
+        db_session,
+        group=trip,
+        actor_user_id=101,
+        data=ExpenseCreate.even(
+            name="Dinner",
+            description=None,
+            payer_user_id=202,
+            total_cents=1000,
+            participant_user_ids=(101, 202, 303),
+        ),
+    )
+    second = await create_expense(
+        db_session,
+        group=trip,
+        actor_user_id=101,
+        data=ExpenseCreate.even(
+            name="Taxi",
+            description=None,
+            payer_user_id=101,
+            total_cents=1000,
+            participant_user_ids=(101, 202, 303),
+        ),
+    )
+
+    assert _shares_by_user(first) == {101: 334, 202: 333, 303: 333}
+    assert _shares_by_user(second) == {101: 333, 202: 334, 303: 333}
+
+
+async def test_edit_even_split_excludes_existing_expense_from_prior_absorptions(
+    db_session: AsyncSession,
+) -> None:
+    trip = await _seed_trip_with_three_members(db_session)
+
+    await create_expense(
+        db_session,
+        group=trip,
+        actor_user_id=101,
+        data=ExpenseCreate.even(
+            name="Dinner",
+            description=None,
+            payer_user_id=202,
+            total_cents=1000,
+            participant_user_ids=(101, 202, 303),
+        ),
+    )
+    expense = await create_expense(
+        db_session,
+        group=trip,
+        actor_user_id=101,
+        data=ExpenseCreate.even(
+            name="Taxi",
+            description=None,
+            payer_user_id=101,
+            total_cents=1000,
+            participant_user_ids=(101, 202, 303),
+        ),
+    )
+
+    edited = await edit_expense(
+        db_session,
+        group=trip,
+        actor_user_id=101,
+        expense_id=expense.id,
+        data=ExpenseCreate.even(
+            name="Taxi updated",
+            description=None,
+            payer_user_id=101,
+            total_cents=1000,
+            participant_user_ids=(101, 202, 303),
+        ),
+    )
+
+    assert _shares_by_user(edited) == {101: 333, 202: 334, 303: 333}
+
+
+async def test_deleted_even_split_no_longer_contributes_to_future_absorptions(
+    db_session: AsyncSession,
+) -> None:
+    trip = await _seed_trip_with_three_members(db_session)
+
+    first = await create_expense(
+        db_session,
+        group=trip,
+        actor_user_id=101,
+        data=ExpenseCreate.even(
+            name="Dinner",
+            description=None,
+            payer_user_id=202,
+            total_cents=1000,
+            participant_user_ids=(101, 202, 303),
+        ),
+    )
+    await create_expense(
+        db_session,
+        group=trip,
+        actor_user_id=101,
+        data=ExpenseCreate.even(
+            name="Taxi",
+            description=None,
+            payer_user_id=101,
+            total_cents=1000,
+            participant_user_ids=(101, 202, 303),
+        ),
+    )
+
+    await delete_expense(db_session, group=trip, actor_user_id=101, expense_id=first.id)
+    third = await create_expense(
+        db_session,
+        group=trip,
+        actor_user_id=101,
+        data=ExpenseCreate.even(
+            name="Snacks",
+            description=None,
+            payer_user_id=303,
+            total_cents=1000,
+            participant_user_ids=(101, 202, 303),
+        ),
+    )
+
+    assert _shares_by_user(third) == {101: 334, 202: 333, 303: 333}

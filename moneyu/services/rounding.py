@@ -23,10 +23,6 @@ def calculate_even_split(
     if remainder == 0:
         return shares
 
-    if payer_user_id in shares:
-        shares[payer_user_id] += remainder
-        return shares
-
     absorption_counts = prior_absorptions or {}
     candidates = sorted(
         participants,

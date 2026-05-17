@@ -160,22 +160,6 @@ class Payment(Base):
     group: Mapped[TripGroup] = relationship(back_populates="payments")
 
 
-class RoundingLedger(Base):
-    __tablename__ = "rounding_ledger"
-    __table_args__ = (
-        UniqueConstraint("group_id", "user_id", name="uq_rounding_ledger_group_user"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    group_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("trip_groups.id", ondelete="CASCADE"), nullable=False
-    )
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    absorbed_cents: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
-
-
 class AuditLog(Base):
     __tablename__ = "audit_log"
     __table_args__ = (Index("ix_audit_log_group_created", "group_id", "created_at"),)

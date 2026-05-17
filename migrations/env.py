@@ -15,7 +15,6 @@ from moneyu.db.models import (
     ExpenseShare,
     Guild,
     Payment,
-    RoundingLedger,
     TripGroup,
     TripMember,
 )
@@ -36,7 +35,6 @@ _MODELS = (
     ExpenseShare,
     Guild,
     Payment,
-    RoundingLedger,
     TripGroup,
     TripMember,
 )

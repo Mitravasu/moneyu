@@ -12,7 +12,6 @@ def test_metadata_contains_v1_tables() -> None:
         "expenses",
         "guilds",
         "payments",
-        "rounding_ledger",
         "trip_groups",
         "trip_members",
     }

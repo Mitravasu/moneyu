@@ -110,12 +110,17 @@ In an even split, the total amount is split across selected participants.
 
 If cents do not divide evenly:
 
-- If the payer is included in the split, the payer absorbs the positive rounding remainder.
-- If the payer is not included, the remainder is assigned among split participants using a fair cent-absorption rotation.
+- The positive rounding remainder is assigned among split participants using a fair cent-absorption rotation, regardless of whether the payer is part of the split.
 
-Cent absorption tracks only positive extra cents. It is tracked per group and user, and only users involved in the current split are candidates. When the payer is excluded, extra cents go to the participant with the lowest prior cent absorption count, tie-broken deterministically by Discord user ID.
+Cent absorption tracks only positive extra cents. Only users involved in the current split are candidates to receive newly assigned extra cents. Extra cents go to the participant(s) with the lowest prior cent absorption count, tie-broken deterministically by Discord user ID.
 
-Payer-absorbed extra cents also count toward that payer's cent-absorption total.
+Cent absorption is derived from stored active even-split expense shares in the trip. Expense shares are the source of truth; there is no separate authoritative cent-absorption ledger.
+
+When creating a new even-split expense, prior cent absorption counts are derived from the trip's other active even-split expenses. When editing an even-split expense, prior counts are derived from the trip's other active even-split expenses, excluding the expense being edited, so the edited expense is recalculated without double counting its previous assignment.
+
+Once an expense's even-split shares are assigned, they stay fixed unless that expense is edited or deleted. Editing an even-split expense recalculates only that expense under the current rule. Deleting an expense removes its contribution because future prior counts are derived only from the remaining active even-split expenses.
+
+Existing expenses created under an older cent-absorption rule keep their stored shares unless they are edited.
 
 ### Custom Splits
 
@@ -284,7 +289,6 @@ Recommended v1 tables:
 - `expenses`
 - `expense_shares`
 - `payments`
-- `rounding_ledger`
 - `audit_log`
 
 Discord users do not need their own table in v1. Store Discord user IDs directly on membership, expense, share, payment, and audit rows.

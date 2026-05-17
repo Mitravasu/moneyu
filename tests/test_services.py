@@ -41,12 +41,12 @@ def test_even_split_without_remainder() -> None:
     ) == {1: 400, 2: 400, 3: 400}
 
 
-def test_even_split_payer_absorbs_remainder_when_included() -> None:
+def test_even_split_uses_absorption_rotation_when_payer_included() -> None:
     assert calculate_even_split(
         total_cents=1000,
         payer_user_id=2,
         participant_user_ids=[1, 2, 3],
-    ) == {1: 333, 2: 334, 3: 333}
+    ) == {1: 334, 2: 333, 3: 333}
 
 
 def test_even_split_uses_absorption_rotation_when_payer_excluded() -> None:

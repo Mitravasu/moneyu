@@ -129,16 +129,6 @@ def upgrade() -> None:
         "ix_payments_group_deleted_created", "payments", ["group_id", "deleted_at", "created_at"]
     )
     op.create_table(
-        "rounding_ledger",
-        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("group_id", sa.Integer(), nullable=False),
-        sa.Column("user_id", sa.BigInteger(), nullable=False),
-        sa.Column("absorbed_cents", sa.Integer(), server_default="0", nullable=False),
-        sa.ForeignKeyConstraint(["group_id"], ["trip_groups.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("group_id", "user_id", name="uq_rounding_ledger_group_user"),
-    )
-    op.create_table(
         "trip_members",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("group_id", sa.Integer(), nullable=False),
@@ -178,7 +168,6 @@ def downgrade() -> None:
     op.drop_table("expense_shares")
     op.drop_index("ix_trip_members_group_active", table_name="trip_members")
     op.drop_table("trip_members")
-    op.drop_table("rounding_ledger")
     op.drop_index("ix_payments_group_deleted_created", table_name="payments")
     op.drop_table("payments")
     op.drop_index("ix_expenses_group_deleted_created", table_name="expenses")
