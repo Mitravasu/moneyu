@@ -20,7 +20,6 @@ Required environment variables:
 - `POSTGRES_USER`: database user for the local Compose Postgres service.
 - `POSTGRES_PASSWORD`: database password for the local Compose Postgres service.
 - `DATABASE_URL`: async SQLAlchemy URL for local host-based commands, for example `postgresql+asyncpg://moneyu:change-me@localhost:5432/moneyu`.
-- `COMPOSE_DATABASE_URL`: async SQLAlchemy URL for the bot container, for example `postgresql+asyncpg://moneyu:change-me@postgres:5432/moneyu`.
 - `OWNER_USER_IDS`: comma-separated Discord user IDs allowed to run `/sync`.
 
 Optional:
@@ -44,7 +43,7 @@ The bot validates config and verifies that the database is at the Alembic head r
 
 ## Docker
 
-`docker-compose.yml` reads `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `COMPOSE_DATABASE_URL` from `.env`. Keep `DATABASE_URL` pointed at `localhost` for local commands like `uv run alembic upgrade head`; inside Compose, the bot uses `COMPOSE_DATABASE_URL`, where the database host must be `postgres`.
+`docker-compose.yml` reads `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` from `.env`, then constructs the bot container `DATABASE_URL` with `postgres` as the host. Keep `.env` `DATABASE_URL` pointed at `localhost` for local commands like `uv run alembic upgrade head`.
 
 Start Postgres:
 
