@@ -158,11 +158,17 @@ async def edit_expense(
     expense.payer_user_id = data.payer_user_id
     expense.split_mode = data.split_mode.value
     expense.amount_cents = sum(shares.values())
+    # Flush orphan deletes before inserting replacements so the per-expense
+    # unique constraint on user_id cannot collide during an edit.
+    expense.shares.clear()
+    await session.flush()
     expense.shares = [
         ExpenseShare(user_id=user_id, share_cents=share_cents)
         for user_id, share_cents in shares.items()
     ]
     await session.flush()
+    await session.refresh(expense)
+    await session.refresh(expense, attribute_names=["shares"])
     await write_audit(
         session,
         guild_id=group.guild_id,
@@ -225,6 +231,8 @@ async def delete_expense(
     expense.deleted_at = datetime.now(UTC)
     expense.deleted_by_user_id = actor_user_id
     await session.flush()
+    await session.refresh(expense)
+    await session.refresh(expense, attribute_names=["shares"])
     await write_audit(
         session,
         guild_id=group.guild_id,

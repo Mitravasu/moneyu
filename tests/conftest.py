@@ -4,6 +4,7 @@ import asyncio
 import os
 import uuid
 from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
 
 import asyncpg
 import pytest
@@ -24,6 +25,21 @@ def _to_asyncpg_dsn(url: URL) -> str:
 
 def _admin_url(url: URL) -> URL:
     return url.set(database="postgres")
+
+
+@contextmanager
+def _temporary_env(**values: str) -> Iterator[None]:
+    original = {key: os.environ.get(key) for key in values}
+    try:
+        for key, value in values.items():
+            os.environ[key] = value
+        yield
+    finally:
+        for key, previous in original.items():
+            if previous is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = previous
 
 
 async def _create_database(base_url: URL, db_name: str) -> None:
@@ -74,7 +90,8 @@ def migrated_engine(integration_database_url: str) -> Iterator[AsyncEngine]:
 
     engine: AsyncEngine | None = None
     try:
-        command.upgrade(alembic_cfg, "head")
+        with _temporary_env(DATABASE_URL=test_url.render_as_string(hide_password=False)):
+            command.upgrade(alembic_cfg, "head")
         engine = create_async_engine(
             test_url.render_as_string(hide_password=False),
             poolclass=NullPool,
